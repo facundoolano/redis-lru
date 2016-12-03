@@ -1,9 +1,13 @@
 'use strict';
 
 // TODO add maxAge (i.e. support expiration)
-// FIXME maybe add a promisify function to avoid repetition
+// FIXME add a promisify function to avoid repetition
 
 function buildCache (client, opts) {
+  if (!client) {
+    throw Error('redis client is required.');
+  }
+
   if (typeof opts === 'number') {
     opts = {max: opts};
   }
@@ -57,7 +61,6 @@ function buildCache (client, opts) {
       .zadd(ZSET_KEY, 'XX', score, key)
       .exec((err, results) => {
         if (err) return reject(err);
-
         const value = results[0] && JSON.parse(results[0]);
         resolve(value);
       });
@@ -140,7 +143,7 @@ function buildCache (client, opts) {
   * first.
   */
   const keys = () => new Promise((resolve, reject) =>
-    client.zrange(ZSET_KEY, 0, opts.max, (err, results) => {
+    client.zrange(ZSET_KEY, 0, opts.max - 1, (err, results) => {
       if (err) return reject(err);
 
       resolve(results.map((key) => key.slice(`${opts.namespace}-k-`.length)));
@@ -151,7 +154,7 @@ function buildCache (client, opts) {
   * first.
   */
   const values = () => new Promise((resolve, reject) =>
-    client.zrange(ZSET_KEY, 0, opts.max, (err, results) => {
+    client.zrange(ZSET_KEY, 0, opts.max - 1, (err, results) => {
       if (err) return reject(err);
 
       const multi = client.multi();
