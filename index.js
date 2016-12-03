@@ -1,8 +1,17 @@
 'use strict';
 
-// TODO add maxAge (i.e. support expiration)
-// FIXME add a promisify function to avoid repetition
+function asPromise (fn) {
+  return new Promise((resolve, reject) => {
+    const args = [...arguments].slice(1);
+    args.push((err, res) => {
+      if (err) return reject(err);
+      resolve(res);
+    });
+    fn.apply(null, args);
+  });
+}
 
+// TODO add maxAge (i.e. support expiration)
 function buildCache (client, opts) {
   if (!client) {
     throw Error('redis client is required.');
@@ -24,7 +33,7 @@ function buildCache (client, opts) {
 
   function namedKey (key) {
     if (!typeof key === 'string') {
-      throw Error('key should be a string.');
+      return Promise.reject(Error('key should be a string.'));
     }
 
     return `${opts.namespace}-k-${key}`;
@@ -34,37 +43,33 @@ function buildCache (client, opts) {
   * Remove a set of keys from the cache and the index, in a single transaction,
   * to avoid orphan indexes or cache values.
   */
-  const safeDelete = (keys) => new Promise((resolve, reject) => {
+  const safeDelete = (keys) => {
     if (keys.length) {
-      return client.multi()
+      const multi = client.multi()
         .zrem(ZSET_KEY, keys)
-        .del(keys)
-        .exec((err) => {
-          if (err) return reject(err);
-          resolve();
-        });
+        .del(keys);
+
+      return asPromise(multi.exec.bind(multi));
     }
 
-    resolve();
-  });
+    return Promise.resolve();
+  };
 
   /*
   * Gets the value for the given key and updates its timestamp score, only if
   * already present in the zset. The result is JSON.parsed before returned.
   */
-  const get = (key) => new Promise((resolve, reject) => {
+  const get = (key) => {
     const score = -new Date().getTime();
     key = namedKey(key);
 
-    client.multi()
+    const multi = client.multi()
       .get(key)
-      .zadd(ZSET_KEY, 'XX', score, key)
-      .exec((err, results) => {
-        if (err) return reject(err);
-        const value = results[0] && JSON.parse(results[0]);
-        resolve(value);
-      });
-  });
+      .zadd(ZSET_KEY, 'XX', score, key);
+
+    return asPromise(multi.exec.bind(multi))
+      .then((results) => results[0] && JSON.parse(results[0]));
+  };
 
   /*
   * Save (add/update) the new value for the given key, and update its timestamp
@@ -74,108 +79,77 @@ function buildCache (client, opts) {
   * then remove each exceeded key from the zset index and its value from the
   * cache (in a single transaction).
   */
-  const set = (key, value) => new Promise((resolve, reject) => {
+  const set = (key, value) => {
     const score = -new Date().getTime();
     key = namedKey(key);
 
-    client.multi()
+    const multi = client.multi()
       .set(key, JSON.stringify(value))
       .zadd(ZSET_KEY, score, key)
-      .zrange(ZSET_KEY, opts.max, -1)
-      .exec((err, results) => {
-        if (err) return reject(err);
+      .zrange(ZSET_KEY, opts.max, -1);
 
-        // we get zrange first then safe delete instead of just zremrange,
-        // that way we guarantee that zset is always in sync with available data in the cache
-        resolve(safeDelete(results[2]));
-      });
-  });
+    // we get zrange first then safe delete instead of just zremrange,
+    // that way we guarantee that zset is always in sync with available data in the cache
+    return asPromise(multi.exec.bind(multi))
+      .then((results) => safeDelete(results[2]));
+  };
 
   /*
   * Retrieve the value for key in the cache (if present), without updating the
   * timestamp score. The result is JSON.parsed before returned.
   */
-  const peek = (key) => new Promise((resolve, reject) =>
-    client.get(namedKey(key), (err, result) => {
-      if (err) return reject(err);
-
-      const value = result && JSON.parse(result);
-      resolve(value);
-    }));
+  const peek = (key) => asPromise(client.get.bind(client), namedKey(key))
+    .then((result) => result && JSON.parse(result));
 
   /*
   * Remove the value of key from the cache (and the zset index).
   */
-  const del = (key) => new Promise((resolve, reject) => {
+  const del = (key) => {
     key = namedKey(key);
 
-    client.multi()
+    const multi = client.multi()
       .del(key)
-      .zrem(ZSET_KEY, key)
-      .exec((err, results) => {
-        if (err) return reject(err);
+      .zrem(ZSET_KEY, key);
 
-        resolve(results[1]);
-      });
-  });
+    return asPromise(multi.exec.bind(multi))
+      .then((results) => results[1]);
+  };
 
   /*
   * Remove all items from cache and the zset index.
   */
-  const reset = () => new Promise((resolve, reject) =>
-    client.zrange(ZSET_KEY, 0, -1, (err, results) => {
-      if (err) return reject(err);
-
-      resolve(safeDelete(results));
-    }));
+  const reset = () => asPromise(client.zrange.bind(client), ZSET_KEY, 0, -1)
+    .then(safeDelete);
 
   /*
   * Return true if the given key is in the cache
   */
-  const has = (key) => new Promise((resolve, reject) =>
-    client.zscore(ZSET_KEY, namedKey(key), (err, result) => {
-      if (err) return reject(err);
-      resolve(!!result);
-    }));
+  const has = (key) => asPromise(client.zscore.bind(client), ZSET_KEY, namedKey(key))
+    .then((result) => (!!result));
 
   /*
   * Return an array of the keys currently in the cache, most reacently accessed
   * first.
   */
-  const keys = () => new Promise((resolve, reject) =>
-    client.zrange(ZSET_KEY, 0, opts.max - 1, (err, results) => {
-      if (err) return reject(err);
-
-      resolve(results.map((key) => key.slice(`${opts.namespace}-k-`.length)));
-    }));
+  const keys = () => asPromise(client.zrange.bind(client), ZSET_KEY, 0, opts.max - 1)
+    .then((results) => results.map((key) => key.slice(`${opts.namespace}-k-`.length)));
 
   /*
   * Return an array of the values currently in the cache, most reacently accessed
   * first.
   */
-  const values = () => new Promise((resolve, reject) =>
-    client.zrange(ZSET_KEY, 0, opts.max - 1, (err, results) => {
-      if (err) return reject(err);
-
+  const values = () => asPromise(client.zrange.bind(client), ZSET_KEY, 0, opts.max - 1)
+    .then((results) => {
       const multi = client.multi();
       results.forEach((key) => multi.get(key));
-
-      multi.exec((err, results) => {
-        if (err) return reject(err);
-
-        resolve(results.map(JSON.parse));
-      });
-    }));
+      return asPromise(multi.exec.bind(multi));
+    })
+    .then((results) => results.map(JSON.parse));
 
   /*
   * Return the amount of items currently in the cache.
   */
-  const count = () => new Promise((resolve, reject) =>
-    client.zcard(ZSET_KEY, (err, result) => {
-      if (err) return reject(err);
-
-      resolve(result);
-    }));
+  const count = () => asPromise(client.zcard.bind(client), ZSET_KEY);
 
   return {
     get: get,
