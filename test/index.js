@@ -19,7 +19,7 @@ const dbsize = () => new Promise((resolve, reject) =>
 //   redis.zrange(`${ns || 'LRU-CACHE!'}-i`, 0, -1, (err, res) => { console.log(res); resolve(); }));
 
 // sometimes need to force a ms change so multiple lru.get have different timestamp scores
-const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
+const tick = () => new Promise((resolve) => setTimeout(resolve, 2));
 
 describe('build cache', () => {
   it('should fail if no client given', () =>
@@ -119,9 +119,13 @@ describe('set and get methods', () => {
     .then(() => lru.set('k2', 'v2'))
     .then(() => lru.set('k3', 'v3'))
     .then(() => lru.get('k2'))
+    .then(tick)
     .then(() => lru.get('k3'))
+    .then(tick)
     .then(() => lru.get('k1'))
+    .then(tick)
     .then(() => lru.set('k2', 'v2')) // k2 back to front, k3 is oldest
+    .then(tick)
     .then(() => lru.set('k4', 'v4')) // k3 out
     .then(() => lru.get('k3'))
     .then((result) => {
@@ -150,43 +154,177 @@ describe('set and get methods', () => {
 });
 
 describe('peek method', () => {
-  it('should return the value without changing the recent-ness score');
+  it('should return the value without changing the recent-ness score', () => {
+    const lru = LRU(redis, 2);
+
+    return lru.set('k1', 'v1')
+      .then(tick)
+      .then(() => lru.set('k2', 'v2'))
+      .then(() => lru.peek('k1'))
+      .then((r) => {
+        assert.equal(r, 'v1');
+        return lru.set('k3', 'v3'); // should evict k1 since last peek doesnt update recentness
+      })
+      .then(() => lru.get('k1'))
+      .then((r) => assert.equal(r, null));
+  });
 });
 
 describe('del method', () => {
-  it('should remove the key from the cache and preserve the rest');
+  it('should remove the key from the cache and preserve the rest', () => {
+    const lru = LRU(redis, 2);
 
-  it('should not remove from other namespaces');
+    return lru.set('k1', 'v1')
+      .then(() => lru.set('k2', 'v2'))
+      .then(() => lru.del('k1'))
+      .then(() => lru.get('k1'))
+      .then((r) => assert.equal(r, null))
+      .then(() => lru.get('k2'))
+      .then((r) => assert.equal(r, 'v2'));
+  });
+
+  it('should not remove from other namespaces', () => {
+    const lru = LRU(redis, 2);
+    const lru2 = LRU(redis, {max: 2, namespace: 'c2'});
+
+    return lru.set('k1', 'v1')
+      .then(() => lru2.set('k1', 'v1'))
+      .then(() => lru.del('k1'))
+      .then(() => lru.get('k1'))
+      .then((r) => assert.equal(r, null))
+      .then(() => lru2.get('k1'))
+      .then((r) => assert.equal(r, 'v1'));
+  });
 });
 
 describe('reset method', () => {
-  it('should remove all keys from the cache');
+  it('should remove all keys from the cache', () => {
+    const lru = LRU(redis, 2);
 
-  it('should not empty other namespaces');
+    return lru.set('k1', 'v1')
+      .then(() => lru.set('k2', 'v2'))
+      .then(() => lru.reset())
+      .then(() => lru.get('k1'))
+      .then((r) => assert.equal(r, null))
+      .then(() => lru.get('k2'))
+      .then((r) => assert.equal(r, null));
+  });
+
+  it('should not empty other namespaces', () => {
+    const lru = LRU(redis, 2);
+    const lru2 = LRU(redis, {max: 2, namespace: 'c2'});
+
+    return lru.set('k1', 'v1')
+      .then(() => lru2.set('k1', 'v1'))
+      .then(() => lru.reset())
+      .then(() => lru.get('k1'))
+      .then((r) => assert.equal(r, null))
+      .then(() => lru2.get('k1'))
+      .then((r) => assert.equal(r, 'v1'));
+  });
 });
 
 describe('has method', () => {
-  it('should return true if the item is in the cache without affecting the recent-ness');
+  it('should return true if the item is in the cache without affecting the recent-ness', () => {
+    const lru = LRU(redis, 2);
 
-  it('should return false if the item is not in the cache');
+    return lru.set('k1', 'v1')
+      .then(tick)
+      .then(() => lru.set('k2', 'v2'))
+      .then(() => lru.has('k1'))
+      .then((r) => {
+        assert.equal(r, true);
+        return lru.set('k3', 'v3'); // should evict k1 since last peek doesnt update recentness
+      })
+      .then(() => lru.get('k1'))
+      .then((r) => assert.equal(r, null));
+  });
+
+  it('should return false if the item is not in the cache', () => {
+    const lru = LRU(redis, 2);
+
+    return lru.set('k1', 'v1')
+      .then(() => lru.set('k2', 'v2'))
+      .then(() => lru.has('k3'))
+      .then((r) => assert.equal(r, false));
+  });
 });
 
 describe('keys method', () => {
-  it('should return all keys inside the cache');
+  it('should return all keys inside the cache', () => {
+    const lru = LRU(redis, 2);
 
-  it('should not return more keys if size exceeded before');
+    return lru.set('k1', 'v1')
+      .then(tick)
+      .then(() => lru.set('k2', 'v2'))
+      .then(() => lru.keys())
+      .then((r) => assert.deepEqual(r, ['k2', 'k1']));
+  });
+
+  it('should not return more keys if size exceeded before', () => {
+    const lru = LRU(redis, 2);
+
+    return lru.set('k1', 'v1')
+      .then(tick)
+      .then(() => lru.set('k2', 'v2'))
+      .then(tick)
+      .then(() => lru.set('k3', 'v3'))
+      .then(() => lru.keys())
+      .then((r) => assert.deepEqual(r, ['k3', 'k2']));
+  });
 });
 
 describe('values method', () => {
-  it('should return all values inside the cache');
+  it('should return all values inside the cache', () => {
+    const lru = LRU(redis, 2);
 
-  it('should not return more values if size exceeded before');
+    return lru.set('k1', 'v1')
+      .then(tick)
+      .then(() => lru.set('k2', 'v2'))
+      .then(() => lru.values())
+      .then((r) => assert.deepEqual(r, ['v2', 'v1']));
+  });
+
+  it('should not return more values if size exceeded before', () => {
+    const lru = LRU(redis, 2);
+
+    return lru.set('k1', 'v1')
+      .then(tick)
+      .then(() => lru.set('k2', 'v2'))
+      .then(tick)
+      .then(() => lru.set('k3', 'v3'))
+      .then(() => lru.values())
+      .then((r) => assert.deepEqual(r, ['v3', 'v2']));
+  });
 });
 
 describe('count method', () => {
-  it('should return zero if no items in the cache');
+  it('should return zero if no items in the cache', () => {
+    const lru = LRU(redis, 2);
 
-  it('should return the amount of items in the cache');
+    return lru.count()
+      .then((r) => assert.equal(r, 0));
+  });
 
-  it('should return the max size if cache size exceeded before');
+  it('should return the amount of items in the cache', () => {
+    const lru = LRU(redis, 2);
+
+    return lru.set('k1', 'v1')
+      .then(tick)
+      .then(() => lru.set('k2', 'v2'))
+      .then(() => lru.count())
+      .then((r) => assert.equal(r, 2));
+  });
+
+  it('should return the max size if cache size exceeded before', () => {
+    const lru = LRU(redis, 2);
+
+    return lru.set('k1', 'v1')
+      .then(tick)
+      .then(() => lru.set('k2', 'v2'))
+      .then(tick)
+      .then(() => lru.set('k3', 'v3'))
+      .then(() => lru.count())
+      .then((r) => assert.equal(r, 2));
+  });
 });
