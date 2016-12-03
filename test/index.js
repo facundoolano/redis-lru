@@ -2,8 +2,8 @@
 
 const assert = require('assert');
 
-// FIXME mock redis
-const redis = require('redis').createClient(6379, 'redis-host');
+// const redis = require('redis').createClient(6379, 'redis-host');
+const redis = require('./redisMock');
 
 const LRU = require('../index');
 
