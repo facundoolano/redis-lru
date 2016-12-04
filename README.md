@@ -9,11 +9,11 @@ var lru = require('redis-lru');
 
 var personCache = lru(5); // up to 5 items
 
-nameCache.set('john', {name: 'John Doe', age: 27})
-  .then(() => nameCache.set('jane', {name: 'Jane Doe', age: 30}))
-  .then(() => nameCache.get('john'))
+personCache.set('john', {name: 'John Doe', age: 27})
+  .then(() => personCache.set('jane', {name: 'Jane Doe', age: 30}))
+  .then(() => personCache.get('john'))
   .then(console.log) // prints {name: 'John Doe', age: 27}
-  .then(() => nameCache.reset()) //clear the cache
+  .then(() => personCache.reset()) //clear the cache
 
 var bandCache = lru({max: 2, namespace: 'bands'}); // use a different namespace
 
