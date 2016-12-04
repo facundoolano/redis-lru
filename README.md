@@ -1,4 +1,4 @@
-# redis lru cache
+# redis lru cache [![Build Status](https://secure.travis-ci.org/facundoolano/redis-lru.png)](http://travis-ci.org/facundoolano/redis-lru)
 
 A least recently used (LRU) cache backed by Redis, allowing data to be shared by
 multiple Node.JS processes. API inspired by [node-lru-cache](https://github.com/isaacs/node-lru-cache).
