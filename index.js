@@ -96,6 +96,20 @@ function buildCache (client, opts) {
   };
 
   /*
+  * Try to get the value of key from the cache. If missing, call function and store
+  * the result.
+  */
+  const getOrSet = (key, fn) => get(key)
+    .then((result) => {
+      if (result === null) {
+        return Promise.resolve()
+          .then(fn)
+          .then((result) => set(key, result));
+      }
+      return result;
+    });
+
+  /*
   * Retrieve the value for key in the cache (if present), without updating the
   * timestamp score. The result is JSON.parsed before returned.
   */
@@ -155,6 +169,7 @@ function buildCache (client, opts) {
   return {
     get: get,
     set: set,
+    getOrSet: getOrSet,
     peek: peek,
     del: del,
     reset: reset,

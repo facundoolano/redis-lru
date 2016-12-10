@@ -50,6 +50,9 @@ All methods return a Promise.
 Keys should be strings, values will be JSON.stringified.
 * `get(key)`: resolve to the value stored in the cache for the given key or `null` if not present.
 If present, the key will be marked as the most recently accessed one.
+* `getOrSet(key, fn)`: resolve to the value stored in the cache for the given key. If not present,
+execute `fn`, save the result in the cache and return it. `fn` should be a no args function that
+returns a value or a promise.
 * `peek(key)`: resolve to the value stored in the cache for the given key, without changing its
 last accessed time.
 * `del(key)`: removes the item from the cache.

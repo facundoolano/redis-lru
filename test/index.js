@@ -154,6 +154,105 @@ describe('set and get methods', () => {
   });
 });
 
+describe('getOrSet method', () => {
+  it('should get the value from cache and NOT call the function', () => {
+    const lru = LRU(redis, 3);
+
+    function fn () {
+      throw Error('should not call');
+    }
+
+    return lru.set('key', 'hello')
+      .then(() => lru.getOrSet('key', fn))
+      .then((result) => assert.equal(result, 'hello'));
+  });
+
+  it('should set key to the return value of the function', () => {
+    const lru = LRU(redis, 3);
+
+    function fn () {
+      return 5;
+    }
+
+    return lru.getOrSet('key', fn)
+      .then((result) => assert.equal(result, 5))
+      .then(() => lru.get('key'))
+      .then((result) => assert.equal(result, 5));
+  });
+
+  it('should set key to the resolved value of the promise returned by the function', () => {
+    const lru = LRU(redis, 3);
+
+    function fn () {
+      return Promise.resolve(5);
+    }
+
+    return lru.getOrSet('key', fn)
+      .then((result) => assert.equal(result, 5))
+      .then(() => lru.get('key'))
+      .then((result) => assert.equal(result, 5));
+  });
+
+  it('should reject if function rejects', () => {
+    const lru = LRU(redis, 3);
+
+    function fn () {
+      return Promise.reject(Error('something went wrong'));
+    }
+
+    return lru.getOrSet('key', fn)
+      .then(() => { throw Error('should not resolve'); })
+      .catch((err) => assert.equal(err.message, 'something went wrong'));
+  });
+
+  it('should reject if function throws', () => {
+    const lru = LRU(redis, 3);
+
+    function fn () {
+      throw Error('something went wrong');
+    }
+
+    return lru.getOrSet('key', fn)
+      .then(() => { throw Error('should not resolve'); })
+      .catch((err) => assert.equal(err.message, 'something went wrong'));
+  });
+
+  it('should update recent-ness when getOrSet a saved value', () => {
+    const lru = LRU(redis, 3);
+
+    return lru.set('k1', 'v1')
+    .then(() => lru.set('k2', 'v2'))
+    .then(() => lru.set('k3', 'v3'))
+    .then(() => lru.getOrSet('k2')) // k2 last
+    .then(tick)
+    .then(() => lru.getOrSet('k3')) // k3 second
+    .then(tick)
+    .then(() => lru.getOrSet('k1')) // k1 first
+    .then(tick)
+    .then(() => lru.set('k4', 'v4')) // should evict oldest => k2 out
+    .then(() => lru.get('k2'))
+    .then((result) => {
+      assert.equal(result, null);
+    });
+  });
+
+  it('should update recent-ness when getOrSet a missing value', () => {
+    const lru = LRU(redis, 3);
+
+    return lru.getOrSet('k2', () => 2) // k2 last
+    .then(tick)
+    .then(() => lru.getOrSet('k3', () => 3)) // k3 second
+    .then(tick)
+    .then(() => lru.getOrSet('k1', () => 1)) // k1 first
+    .then(tick)
+    .then(() => lru.set('k4', 'v4')) // should evict oldest => k2 out
+    .then(() => lru.get('k2'))
+    .then((result) => {
+      assert.equal(result, null);
+    });
+  });
+});
+
 describe('peek method', () => {
   it('should return the value without changing the recent-ness score', () => {
     const lru = LRU(redis, 2);
