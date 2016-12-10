@@ -36,6 +36,7 @@ describe('set and get methods', () => {
     const lru = LRU(redis, 3);
 
     return lru.set('key', 'hello')
+      .then((result) => assert.equal(result, 'hello'))
       .then(() => lru.set('key2', {message: 'goodbye'}))
       .then(() => Promise.all([lru.get('key'), lru.get('key2')]))
       .then((results) => {

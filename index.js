@@ -91,7 +91,8 @@ function buildCache (client, opts) {
     // we get zrange first then safe delete instead of just zremrange,
     // that way we guarantee that zset is always in sync with available data in the cache
     return asPromise(multi.exec.bind(multi))
-      .then((results) => safeDelete(results[2]));
+      .then((results) => safeDelete(results[2]))
+      .then(() => value);
   };
 
   /*
