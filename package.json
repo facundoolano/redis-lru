@@ -1,6 +1,6 @@
 {
   "name": "redis-lru",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "redis-backed LRU cache",
   "main": "index.js",
   "scripts": {
