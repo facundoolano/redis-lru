@@ -11,7 +11,6 @@ function asPromise (fn) {
   });
 }
 
-// TODO add maxAge (i.e. support expiration)
 function buildCache (client, opts) {
   if (!client) {
     throw Error('redis client is required.');
@@ -65,10 +64,17 @@ function buildCache (client, opts) {
 
     const multi = client.multi()
       .get(key)
-      .zadd(ZSET_KEY, 'XX', score, key);
+      .zadd(ZSET_KEY, 'XX', 'CH', score, key);
 
     return asPromise(multi.exec.bind(multi))
-      .then((results) => results[0] && JSON.parse(results[0]));
+      .then((results) => {
+        if (results[0] === null && results[1]) {
+          // value has been expired, remove from zset
+          return asPromise(client.zrem.bind(client), ZSET_KEY, key)
+            .then(() => null);
+        }
+        return JSON.parse(results[0]);
+      });
   };
 
   /*
@@ -79,13 +85,18 @@ function buildCache (client, opts) {
   * then remove each exceeded key from the zset index and its value from the
   * cache (in a single transaction).
   */
-  const set = (key, value) => {
-    const score = -new Date().getTime();
+  const set = (key, value, maxAge) => {
     key = namedKey(key);
+    const score = -new Date().getTime();
+    maxAge = maxAge || opts.maxAge;
 
-    const multi = client.multi()
-      .set(key, JSON.stringify(value))
-      .zadd(ZSET_KEY, score, key)
+    const multi = client.multi();
+    if (maxAge) {
+      multi.set(key, JSON.stringify(value), 'PX', maxAge);
+    } else {
+      multi.set(key, JSON.stringify(value));
+    }
+    multi.zadd(ZSET_KEY, score, key)
       .zrange(ZSET_KEY, opts.max, -1);
 
     // we get zrange first then safe delete instead of just zremrange,
@@ -99,12 +110,12 @@ function buildCache (client, opts) {
   * Try to get the value of key from the cache. If missing, call function and store
   * the result.
   */
-  const getOrSet = (key, fn) => get(key)
+  const getOrSet = (key, fn, maxAge) => get(key)
     .then((result) => {
       if (result === null) {
         return Promise.resolve()
           .then(fn)
-          .then((result) => set(key, result));
+          .then((result) => set(key, result, maxAge));
       }
       return result;
     });
@@ -113,8 +124,19 @@ function buildCache (client, opts) {
   * Retrieve the value for key in the cache (if present), without updating the
   * timestamp score. The result is JSON.parsed before returned.
   */
-  const peek = (key) => asPromise(client.get.bind(client), namedKey(key))
-    .then((result) => result && JSON.parse(result));
+  const peek = (key) => {
+    key = namedKey(key);
+
+    return asPromise(client.get.bind(client), key)
+      .then((result) => {
+        if (result === null) {
+          // value may have been expired, remove from zset
+          return asPromise(client.zrem.bind(client), ZSET_KEY, key)
+            .then(() => null);
+        }
+        return JSON.parse(result);
+      });
+  };
 
   /*
   * Remove the value of key from the cache (and the zset index).
@@ -139,7 +161,7 @@ function buildCache (client, opts) {
   /*
   * Return true if the given key is in the cache
   */
-  const has = (key) => asPromise(client.zscore.bind(client), ZSET_KEY, namedKey(key))
+  const has = (key) => asPromise(client.get.bind(client), namedKey(key))
     .then((result) => (!!result));
 
   /*

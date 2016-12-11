@@ -15,7 +15,7 @@ personCache.set('john', {name: 'John Doe', age: 27})
   .then(console.log) // prints {name: 'John Doe', age: 27}
   .then(() => personCache.reset()) //clear the cache
 
-var bandCache = lru({max: 2, namespace: 'bands'}); // use a different namespace
+var bandCache = lru({max: 2, namespace: 'bands', maxAge: 15000}); // use a different namespace and set expiration
 
 bandCache.set('beatles', 'john, paul, george, ringo')
   .then(() => bandCache.set('zeppelin', 'jimmy, robert, john, bonzo'))
@@ -39,20 +39,24 @@ npm install redis-lru
 * `max`: Maximum amount of items the cache can hold. This option is required; if no
 other option is needed, it can be passed directly as the second parameter when creating
 the cache.
-* `namespace`: prefix appended to all keys saved in Redis, to avoid clashes with other applications
+* `namespace`: Prefix appended to all keys saved in Redis, to avoid clashes with other applications
 and to allow multiple instances of the cache.
+* `maxAge`: Maximum amount of milliseconds the key will be kept in the cache; after that getting/peeking will
+resolve to `null`. Note that the value will be removed from Redis after `maxAge`, but the key will
+be kept in the cache until next time it's accessed (i.e. it will be included in `count`, `keys`, etc., although not in `has`.).
 
 ## API
 
 All methods return a Promise.
 
-* `set(key, value)`: set value for the given key, marking it as the most recently accessed one.
-Keys should be strings, values will be JSON.stringified.
+* `set(key, value, maxAge)`: set value for the given key, marking it as the most recently accessed one.
+Keys should be strings, values will be JSON.stringified. The optional `maxAge` overrides for this specific key
+the global expiration of the cache.
 * `get(key)`: resolve to the value stored in the cache for the given key or `null` if not present.
 If present, the key will be marked as the most recently accessed one.
-* `getOrSet(key, fn)`: resolve to the value stored in the cache for the given key. If not present,
+* `getOrSet(key, fn, maxAge)`: resolve to the value stored in the cache for the given key. If not present,
 execute `fn`, save the result in the cache and return it. `fn` should be a no args function that
-returns a value or a promise.
+returns a value or a promise. If `maxAge` is passed, it will be used only if the key is not already in the cache.
 * `peek(key)`: resolve to the value stored in the cache for the given key, without changing its
 last accessed time.
 * `del(key)`: removes the item from the cache.

@@ -19,7 +19,7 @@ const dbsize = () => new Promise((resolve, reject) =>
 //   redis.zrange(`${ns || 'LRU-CACHE!'}-i`, 0, -1, (err, res) => { console.log(res); resolve(); }));
 
 // sometimes need to force a ms change so multiple lru.get have different timestamp scores
-const tick = () => new Promise((resolve) => setTimeout(resolve, 2));
+const tick = (time) => new Promise((resolve) => setTimeout(resolve, time || 2));
 
 describe('build cache', () => {
   it('should fail if no client given', () =>
@@ -426,5 +426,100 @@ describe('count method', () => {
       .then(() => lru.set('k3', 'v3'))
       .then(() => lru.count())
       .then((r) => assert.equal(r, 2));
+  });
+});
+
+describe('maxAge option', () => {
+  it('should return null after global maxAge has passed', () => {
+    const lru = LRU(redis, {max: 2, maxAge: 10});
+
+    return lru.set('k1', 'v1')
+      .then(() => lru.get('k1'))
+      .then((result) => assert.equal(result, 'v1'))
+      .then(() => tick(11))
+      .then(() => lru.get('k1'))
+      .then((result) => assert.equal(result, null));
+  });
+
+  it('should return null after key maxAge has passed', () => {
+    const lru = LRU(redis, {max: 2});
+
+    return lru.set('k1', 'v1', 10)
+      .then(() => lru.get('k1'))
+      .then((result) => assert.equal(result, 'v1'))
+      .then(() => tick(11))
+      .then(() => lru.get('k1'))
+      .then((result) => assert.equal(result, null));
+  });
+
+  it('should reduce dbsize after key expiration', () => {
+    const lru = LRU(redis, {max: 2, maxAge: 10});
+
+    return lru.set('k1', 'v1')
+      .then(dbsize)
+      .then((size) => assert.equal(size, 2))
+      .then(() => tick(11))
+      .then(() => lru.get('k1'))
+      .then((result) => assert.equal(result, null))
+      .then(dbsize)
+      .then((size) => assert.equal(size, 0)); // zset doesnt count if empty
+  });
+
+  it('should remove expired key from index next time is getted', () => {
+    const lru = LRU(redis, {max: 2});
+
+    return lru.set('k1', 'v1')
+      .then(() => lru.set('k2', 'v2', 10))
+      .then(() => tick(11))
+      .then(() => lru.get('k2'))
+      .then((result) => assert.equal(result, null))
+      .then(() => lru.count())
+      .then((count) => assert.equal(count, 1))
+      .then(() => lru.keys())
+      .then((keys) => assert.deepEqual(keys, ['k1']));
+  });
+
+  it('should remove expired key from index next time is peeked', () => {
+    const lru = LRU(redis, {max: 2});
+
+    return lru.set('k1', 'v1')
+      .then(() => lru.set('k2', 'v2', 10))
+      .then(() => tick(11))
+      .then(() => lru.peek('k2'))
+      .then((result) => assert.equal(result, null))
+      .then(() => lru.count())
+      .then((count) => assert.equal(count, 1))
+      .then(() => lru.keys())
+      .then((keys) => assert.deepEqual(keys, ['k1']));
+  });
+
+  it('should not let key maxAge affect other keys', () => {
+    const lru = LRU(redis, {max: 2, maxAge: 30});
+
+    return lru.set('k1', 'v1', 10)
+      .then(() => lru.set('k2', 'v2'))
+      .then(() => lru.get('k1'))
+      .then((result) => assert.equal(result, 'v1'))
+      .then(() => lru.get('k2'))
+      .then((result) => assert.equal(result, 'v2'))
+      .then(() => tick(11))
+      .then(() => lru.get('k1'))
+      .then((result) => assert.equal(result, null))
+      .then(() => lru.get('k2'))
+      .then((result) => assert.equal(result, 'v2'))
+      .then(() => tick(20))
+      .then(() => lru.get('k2'))
+      .then((result) => assert.equal(result, null));
+  });
+
+  it('should return false when calling has on an expired item', () => {
+    const lru = LRU(redis, {max: 2, maxAge: 10});
+
+    return lru.set('k1', 'v1')
+      .then(() => lru.has('k1'))
+      .then((result) => assert.equal(result, true))
+      .then(() => tick(11))
+      .then(() => lru.has('k1'))
+      .then((result) => assert.equal(result, false));
   });
 });
