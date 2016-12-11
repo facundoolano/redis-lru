@@ -23,11 +23,23 @@ const redisMock = {
     });
     cb(null);
   },
-  zadd: function (key, xx, ch, score, member, cb) {
-    // BEING LAZY HERE, assuming that if XX comes in, CH comes in too, and in that order
+
+  zadd: function (key, xx, ch, incr, score, member, cb) {
+    // TODO fix this mess
     let optXX = xx && typeof xx === 'string' && xx.toLowerCase() === 'xx';
-    if (!optXX) {
+    let optINCR = (xx && typeof xx === 'string' && xx.toLowerCase() === 'incr' ||
+                   incr && typeof incr === 'string' && incr.toLowerCase() === 'incr');
+
+    if (optXX && !optINCR) {
+      cb = member;
+      member = score;
+      score = incr;
+    } else if (!optXX && optINCR) {
       cb = score;
+      member = incr;
+      score = ch;
+    } else if (!optXX && !optINCR) {
+      cb = incr;
       member = ch;
       score = xx;
     }
@@ -37,7 +49,11 @@ const redisMock = {
     let result = 0;
     const index = db[key].findIndex((item) => item.member === member);
     if (index !== -1) {
-      db[key][index] = {member, score};
+      if (optINCR) {
+        db[key][index] = {member, score: db[key][index].score + score};
+      } else {
+        db[key][index] = {member, score};
+      }
       result = optXX ? 1 : 0; // if XX, also assume CH, return amount changed
     } else if (!optXX) {
       db[key].push({member, score});
@@ -86,32 +102,17 @@ const redisMock = {
 
     const multiObj = {};
 
-    function callOnClient (method) {
-      const args = [...arguments].slice(1);
-      args.push((e, res) => results.push(res));
-      client[method].apply(client, args);
+    ['get', 'set', 'del', 'zadd', 'zrange', 'zrem']
+      .forEach((method) => {
+        multiObj[method] = function () {
+          // take arguments and add a custom callback
+          const args = [...arguments].concat([(e, res) => results.push(res)]);
+          client[method].apply(client, args);
+          return multiObj;
+        };
+      });
 
-      return multiObj;
-    }
-
-    multiObj.get = (key) => callOnClient('get', key);
-    multiObj.set = (key, value, px, ms) => {
-      if (ms) {
-        return callOnClient('set', key, value, px, ms);
-      }
-      return callOnClient('set', key, value);
-    };
-    multiObj.del = (key) => callOnClient('del', key);
-    multiObj.zadd = (key, xx, ch, score, member) => {
-      if (member) {
-        return callOnClient('zadd', key, xx, ch, score, member);
-      }
-      return callOnClient('zadd', key, xx, ch);
-    };
-    multiObj.zrange = (key, start, end) => callOnClient('zrange', key, start, end);
-    multiObj.zrem = (key, member) => callOnClient('zrem', key, member);
     multiObj.exec = (cb) => cb(null, results);
-
     return multiObj;
   },
 
