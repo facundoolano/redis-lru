@@ -44,6 +44,9 @@ and to allow multiple instances of the cache.
 * `maxAge`: Maximum amount of milliseconds the key will be kept in the cache; after that getting/peeking will
 resolve to `null`. Note that the value will be removed from Redis after `maxAge`, but the key will
 be kept in the cache until next time it's accessed (i.e. it will be included in `count`, `keys`, etc., although not in `has`.).
+* `score`: function to customize the score used to order the elements in the cache. Defaults to `() => new Date().getTime()`
+* `increment`: if `true`, on each access the result of the `score` function is added to the previous one,
+rather than replacing it.
 
 ## API
 
