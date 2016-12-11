@@ -25,39 +25,27 @@ const redisMock = {
   },
 
   zadd: function (key, xx, ch, incr, score, member, cb) {
-    // TODO fix this mess
-    let optXX = xx && typeof xx === 'string' && xx.toLowerCase() === 'xx';
-    let optINCR = (xx && typeof xx === 'string' && xx.toLowerCase() === 'incr' ||
-                   incr && typeof incr === 'string' && incr.toLowerCase() === 'incr');
-
-    if (optXX && !optINCR) {
-      cb = member;
-      member = score;
-      score = incr;
-    } else if (!optXX && optINCR) {
-      cb = score;
-      member = incr;
-      score = ch;
-    } else if (!optXX && !optINCR) {
-      cb = incr;
-      member = ch;
-      score = xx;
-    }
+    const args = [...arguments];
+    const optXX = args.find((arg) => typeof arg === 'string' && arg.toLowerCase() === 'xx');
+    const optCH = args.find((arg) => typeof arg === 'string' && arg.toLowerCase() === 'ch');
+    const optINCR = args.find((arg) => typeof arg === 'string' && arg.toLowerCase() === 'incr');
+    const required = args.slice(-3);
+    score = required[0];
+    member = required[1];
+    cb = required[2];
 
     db[key] = db[key] || [];
 
     let result = 0;
     const index = db[key].findIndex((item) => item.member === member);
     if (index !== -1) {
-      if (optINCR) {
-        db[key][index] = {member, score: db[key][index].score + score};
-      } else {
-        db[key][index] = {member, score};
-      }
-      result = optXX ? 1 : 0; // if XX, also assume CH, return amount changed
+      score = optINCR ? db[key][index].score + score : score;
+      db[key][index] = {member, score};
+
+      result = optCH ? 1 : 0; // if CH return changed
     } else if (!optXX) {
       db[key].push({member, score});
-      result = 1; // if not XX, return amount added, always 1
+      result = optCH ? 0 : 1; // if not CH return added
     }
 
     db[key] = db[key].sort((a, b) => a.score - b.score);
