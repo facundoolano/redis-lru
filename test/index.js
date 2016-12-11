@@ -523,3 +523,21 @@ describe('maxAge option', () => {
       .then((result) => assert.equal(result, false));
   });
 });
+
+describe('custom score/increment options', () => {
+  it('should allow building a LFU cache with a custom score and increment', () => {
+    const lfu = LRU(redis, {max: 3, score: () => 1, increment: true});
+
+    return lfu.set('k1', 'v1')
+      .then(() => lfu.get('k1'))
+      .then(() => lfu.get('k1')) // k1 used three times
+      .then(() => lfu.set('k2', 'v2'))
+      .then(() => lfu.set('k2', 'v22')) // k2 used 2 times
+      .then(() => lfu.set('k3', 'v3'))
+      .then(() => lfu.set('k4', 'v4')) // k3 should be removed
+      .then(() => lfu.get('k3'))
+      .then((result) => assert.equal(result, null))
+      .then(() => lfu.keys())
+      .then((keys) => assert.deepEqual(keys, ['k1', 'k2', 'k4']));
+  });
+});

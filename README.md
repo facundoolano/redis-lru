@@ -66,6 +66,25 @@ last accessed time.
 * `values()`: resolves to an array of values in the cache, sorted from most to least recently accessed.
 * `count()`: resolves to the number of items currently in the cache.
 
+### Using as a LFU cache
+
+By using a custom `score` function and the `increment` option, one can turn the cache
+into a least frequently used (LFU), where the items that have been accessed more times
+(rather than most recently) are preserved:
+
+```js
+var redis = require('redis').createClient(port, host, opts);
+var lru = require('redis-lru');
+
+var bandLfu = lru({max: 2, score: () => 1, increment: true});
+
+bandLfu.set('beatles', 'john, paul, george, ringo')
+  .then(() => bandLfu.get('beatles')) // accessed twice
+  .then(() => bandLfu.set('zeppelin', 'jimmy, robert, john, bonzo'))
+  .then(() => bandLfu.set('floyd', 'david, roger, syd, richard, nick')) // cache full, remove least frequently accessed
+  .then(() => bandLfu.get('zeppelin'))
+  .then(console.log) // null, was evicted from cache
+```
 
 ## Implementation
 

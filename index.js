@@ -21,7 +21,9 @@ function buildCache (client, opts) {
   }
 
   opts = Object.assign({
-    namespace: 'LRU-CACHE!'
+    namespace: 'LRU-CACHE!',
+    score: () => new Date().getTime(),
+    increment: false
   }, opts);
 
   if (!opts.max) {
@@ -59,12 +61,17 @@ function buildCache (client, opts) {
   * already present in the zset. The result is JSON.parsed before returned.
   */
   const get = (key) => {
-    const score = -new Date().getTime();
+    const score = -1 * opts.score(key);
     key = namedKey(key);
 
     const multi = client.multi()
-      .get(key)
-      .zadd(ZSET_KEY, 'XX', 'CH', score, key);
+      .get(key);
+
+    if (opts.increment) {
+      multi.zadd(ZSET_KEY, 'XX', 'CH', 'INCR', score, key);
+    } else {
+      multi.zadd(ZSET_KEY, 'XX', 'CH', score, key);
+    }
 
     return asPromise(multi.exec.bind(multi))
       .then((results) => {
@@ -86,8 +93,8 @@ function buildCache (client, opts) {
   * cache (in a single transaction).
   */
   const set = (key, value, maxAge) => {
+    const score = -1 * opts.score(key);
     key = namedKey(key);
-    const score = -new Date().getTime();
     maxAge = maxAge || opts.maxAge;
 
     const multi = client.multi();
@@ -96,13 +103,29 @@ function buildCache (client, opts) {
     } else {
       multi.set(key, JSON.stringify(value));
     }
-    multi.zadd(ZSET_KEY, score, key)
-      .zrange(ZSET_KEY, opts.max, -1);
+
+    if (opts.increment) {
+      multi.zadd(ZSET_KEY, 'INCR', score, key);
+    } else {
+      multi.zadd(ZSET_KEY, score, key);
+    }
 
     // we get zrange first then safe delete instead of just zremrange,
     // that way we guarantee that zset is always in sync with available data in the cache
+    // also, include the last item inside the cache size, because we always want to
+    // preserve the one that was just set, even if it has same or less score than other.
+    multi.zrange(ZSET_KEY, opts.max - 1, -1);
+
     return asPromise(multi.exec.bind(multi))
-      .then((results) => safeDelete(results[2]))
+      .then((results) => {
+        if (results[2].length > 1) { // the first one is inside the limit
+          let toDelete = results[2].slice(1);
+          if (toDelete.indexOf(key) !== -1) {
+            toDelete = results[2].slice(0, 1).concat(results[2].slice(2));
+          }
+          return safeDelete(toDelete);
+        }
+      })
       .then(() => value);
   };
 
@@ -142,6 +165,7 @@ function buildCache (client, opts) {
   * Remove the value of key from the cache (and the zset index).
   */
   const del = (key) => {
+    // TODO safeDelete?
     key = namedKey(key);
 
     const multi = client.multi()
