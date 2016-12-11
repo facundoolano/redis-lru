@@ -164,17 +164,7 @@ function buildCache (client, opts) {
   /*
   * Remove the value of key from the cache (and the zset index).
   */
-  const del = (key) => {
-    // TODO safeDelete?
-    key = namedKey(key);
-
-    const multi = client.multi()
-      .del(key)
-      .zrem(ZSET_KEY, key);
-
-    return asPromise(multi.exec.bind(multi))
-      .then((results) => results[1]);
-  };
+  const del = (key) => safeDelete([namedKey(key)]);
 
   /*
   * Remove all items from cache and the zset index.
