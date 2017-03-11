@@ -25,7 +25,7 @@ const redisMock = {
   },
 
   zadd: function (key, xx, ch, incr, score, member, cb) {
-    const args = [...arguments];
+    const args = Array.from(arguments);
     const optXX = args.find((arg) => typeof arg === 'string' && arg.toLowerCase() === 'xx');
     const optCH = args.find((arg) => typeof arg === 'string' && arg.toLowerCase() === 'ch');
     const optINCR = args.find((arg) => typeof arg === 'string' && arg.toLowerCase() === 'incr');
@@ -94,7 +94,7 @@ const redisMock = {
       .forEach((method) => {
         multiObj[method] = function () {
           // take arguments and add a custom callback
-          const args = [...arguments].concat([(e, res) => results.push(res)]);
+          const args = Array.from(arguments).concat([(e, res) => results.push(res)]);
           client[method].apply(client, args);
           return multiObj;
         };
