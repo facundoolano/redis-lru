@@ -7,7 +7,7 @@ multiple Node.JS processes. API inspired by [node-lru-cache](https://github.com/
 var redis = require('redis').createClient(port, host, opts);
 var lru = require('redis-lru');
 
-var personCache = lru(5); // up to 5 items
+var personCache = lru(redis, 5); // up to 5 items
 
 personCache.set('john', {name: 'John Doe', age: 27})
   .then(() => personCache.set('jane', {name: 'Jane Doe', age: 30}))
@@ -15,7 +15,7 @@ personCache.set('john', {name: 'John Doe', age: 27})
   .then(console.log) // prints {name: 'John Doe', age: 27}
   .then(() => personCache.reset()) //clear the cache
 
-var bandCache = lru({max: 2, namespace: 'bands', maxAge: 15000}); // use a different namespace and set expiration
+var bandCache = lru(redis, {max: 2, namespace: 'bands', maxAge: 15000}); // use a different namespace and set expiration
 
 bandCache.set('beatles', 'john, paul, george, ringo')
   .then(() => bandCache.set('zeppelin', 'jimmy, robert, john, bonzo'))
@@ -79,7 +79,7 @@ into a least frequently used (LFU), where the items that have been accessed more
 var redis = require('redis').createClient(port, host, opts);
 var lru = require('redis-lru');
 
-var bandLfu = lru({max: 2, score: () => 1, increment: true});
+var bandLfu = lru(redis, {max: 2, score: () => 1, increment: true});
 
 bandLfu.set('beatles', 'john, paul, george, ringo')
   .then(() => bandLfu.get('beatles')) // accessed twice
