@@ -80,7 +80,12 @@ function buildCache (client, opts) {
           return asPromise(client.zrem.bind(client), ZSET_KEY, key)
             .then(() => null);
         }
-        return JSON.parse(results[0]);
+
+        if (Array.isArray(results[0])) {
+          return JsonParse(results[0][1]);
+        } else {
+          return JsonParse(results[0]);
+        }
       });
   };
 
@@ -157,7 +162,7 @@ function buildCache (client, opts) {
           return asPromise(client.zrem.bind(client), ZSET_KEY, key)
             .then(() => null);
         }
-        return JSON.parse(result);
+        return JsonParse(result);
       });
   };
 
@@ -195,7 +200,24 @@ function buildCache (client, opts) {
       results.forEach((key) => multi.get(key));
       return asPromise(multi.exec.bind(multi));
     })
-    .then((results) => results.map(JSON.parse));
+    .then((results) => {
+      return results.map((res) => {
+        if (Array.isArray(res)) {
+          return JsonParse(res[1]);
+        } else {
+          return JsonParse(res);
+        }
+      });
+    });
+
+  const JsonParse = (str) => {
+    try {
+      return JSON.parse(str);
+    } catch (err) {
+      console.error(`[JSON PARSE ERROR]: ${str}`);
+      return str;
+    }
+  };
 
   /*
   * Return the amount of items currently in the cache.
