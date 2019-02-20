@@ -11,11 +11,11 @@ function asPromise (fn) {
   });
 }
 
-function isArray(item) {
+function isArray (item) {
   return Array.isArray(item);
 }
 
-function flattenMultiResults(results) {
+function flattenMultiResults (results) {
   return results.map((result) => result[1]);
 }
 
@@ -131,7 +131,7 @@ function buildCache (client, opts) {
 
     return asPromise(multi.exec.bind(multi))
       .then((results) => {
-        if(isArray(results[0])) {
+        if (isArray(results[0])) {
           results = flattenMultiResults(results);
         }
 
@@ -199,7 +199,7 @@ function buildCache (client, opts) {
   * Return an array of the keys currently in the cache, most reacently accessed
   * first.
   */
-  const keys = () => asPromise(client.zrange.bind(client), ZSET_KEY, 0,  - 1)
+  const keys = () => asPromise(client.zrange.bind(client), ZSET_KEY, 0, -1)
     .then((results) => results.map((key) => key.slice(`${opts.namespace}-k-`.length)));
 
   /*
@@ -214,7 +214,7 @@ function buildCache (client, opts) {
     })
     .then((results) => {
       return results.map((res) => {
-        if(isArray(res)) {
+        if (isArray(res)) {
           res = res[1];
         }
         return JSON.parse(res);
