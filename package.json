@@ -28,5 +28,10 @@
     "mocha": "^2.4.5"
   },
   "author": "Facundo Olano",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "flatten": "^1.0.2",
+    "ioredis": "^4.6.2",
+    "redis": "^2.8.0"
+  }
 }

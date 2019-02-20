@@ -11,6 +11,14 @@ function asPromise (fn) {
   });
 }
 
+function isArray(item) {
+  return Array.isArray(item);
+}
+
+function flattenMultiResults(results) {
+  return results.map((result) => result[1]);
+}
+
 function buildCache (client, opts) {
   if (!client) {
     throw Error('redis client is required.');
@@ -75,17 +83,18 @@ function buildCache (client, opts) {
 
     return asPromise(multi.exec.bind(multi))
       .then((results) => {
+        if (isArray(results[0])) {
+          results = flattenMultiResults(results);
+        }
+
+        console.log("GET RESULTS: ", results);
         if (results[0] === null && results[1]) {
           // value has been expired, remove from zset
           return asPromise(client.zrem.bind(client), ZSET_KEY, key)
             .then(() => null);
         }
 
-        if (Array.isArray(results[0])) {
-          return JsonParse(results[0][1]);
-        } else {
-          return JsonParse(results[0]);
-        }
+        return JSON.parse(results[0]);
       });
   };
 
@@ -123,6 +132,11 @@ function buildCache (client, opts) {
 
     return asPromise(multi.exec.bind(multi))
       .then((results) => {
+        if(isArray(results[0])) {
+          results = flattenMultiResults(results);
+        }
+
+        console.log("SET RESULTS: ", results);
         if (results[2].length > 1) { // the first one is inside the limit
           let toDelete = results[2].slice(1);
           if (toDelete.indexOf(key) !== -1) {
@@ -162,7 +176,7 @@ function buildCache (client, opts) {
           return asPromise(client.zrem.bind(client), ZSET_KEY, key)
             .then(() => null);
         }
-        return JsonParse(result);
+        return JSON.parse(result);
       });
   };
 
@@ -187,7 +201,7 @@ function buildCache (client, opts) {
   * Return an array of the keys currently in the cache, most reacently accessed
   * first.
   */
-  const keys = () => asPromise(client.zrange.bind(client), ZSET_KEY, 0, opts.max - 1)
+  const keys = () => asPromise(client.zrange.bind(client), ZSET_KEY, 0,  - 1)
     .then((results) => results.map((key) => key.slice(`${opts.namespace}-k-`.length)));
 
   /*
@@ -202,23 +216,9 @@ function buildCache (client, opts) {
     })
     .then((results) => {
       return results.map((res) => {
-        if (Array.isArray(res)) {
-          return JsonParse(res[1]);
-        } else {
-          return JsonParse(res);
-        }
+        return JSON.parse(res[1]);
       });
     });
-
-  const JsonParse = (str) => {
-    try {
-      return JSON.parse(str);
-    } catch (err) {
-      console.error(`[JSON PARSE ERROR]: ${str}`);
-      return str;
-    }
-  };
-
   /*
   * Return the amount of items currently in the cache.
   */

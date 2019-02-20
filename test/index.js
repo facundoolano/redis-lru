@@ -2,8 +2,9 @@
 
 const assert = require('assert');
 
-// const redis = require('redis').createClient(6379, 'redis-host');
-const redis = require('./redisMock');
+const redis = require('redis').createClient(6379, 'localhost');
+// const Redis = require('ioredis'); const redis = new Redis(6379, 'localhost');
+// const redis = require('./redisMock');
 
 const LRU = require('../index');
 
@@ -534,7 +535,11 @@ describe('custom score/increment options', () => {
       .then(() => lfu.set('k2', 'v2'))
       .then(() => lfu.set('k2', 'v22')) // k2 used 2 times
       .then(() => lfu.set('k3', 'v3'))
+      .then(() => lfu.keys())
+      .then((keys) => console.log("KEYS: ", keys))
       .then(() => lfu.set('k4', 'v4')) // k3 should be removed
+      .then(() => lfu.keys())
+        .then((keys) => console.log("KEYS: ", keys))
       .then(() => lfu.get('k3'))
       .then((result) => assert.equal(result, null))
       .then(() => lfu.keys())
