@@ -11,6 +11,22 @@ function asPromise (fn) {
   });
 }
 
+function isArray (item) {
+  return Array.isArray(item);
+}
+
+/*
+* IORedis uses a different format than node_redis for transactional results.
+* Instead of ['OK', 1] it returns [[null, 'OK'], [null, 1]]. This function
+* is used to convert the IORedis results to the same format as node_redis.
+*/
+function convertToNodeRedis (results) {
+  if (isArray(results[0])) {
+    return results.map((result) => result[1]);
+  }
+  return results;
+}
+
 function buildCache (client, opts) {
   if (!client) {
     throw Error('redis client is required.');
@@ -74,6 +90,7 @@ function buildCache (client, opts) {
     }
 
     return asPromise(multi.exec.bind(multi))
+      .then(convertToNodeRedis)
       .then((results) => {
         if (results[0] === null && results[1]) {
           // value has been expired, remove from zset
@@ -117,6 +134,7 @@ function buildCache (client, opts) {
     multi.zrange(ZSET_KEY, opts.max - 1, -1);
 
     return asPromise(multi.exec.bind(multi))
+      .then(convertToNodeRedis)
       .then((results) => {
         if (results[2].length > 1) { // the first one is inside the limit
           let toDelete = results[2].slice(1);
@@ -195,8 +213,14 @@ function buildCache (client, opts) {
       results.forEach((key) => multi.get(key));
       return asPromise(multi.exec.bind(multi));
     })
-    .then((results) => results.map(JSON.parse));
-
+    .then((results) => {
+      return results.map((res) => {
+        if (isArray(res)) {
+          res = res[1];
+        }
+        return JSON.parse(res);
+      });
+    });
   /*
   * Return the amount of items currently in the cache.
   */
