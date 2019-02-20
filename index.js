@@ -86,13 +86,11 @@ function buildCache (client, opts) {
         if (isArray(results[0])) {
           results = flattenMultiResults(results);
         }
-
         if (results[0] === null && results[1]) {
           // value has been expired, remove from zset
           return asPromise(client.zrem.bind(client), ZSET_KEY, key)
             .then(() => null);
         }
-
         return JSON.parse(results[0]);
       });
   };
@@ -134,7 +132,6 @@ function buildCache (client, opts) {
         if (isArray(results[0])) {
           results = flattenMultiResults(results);
         }
-
         if (results[2].length > 1) { // the first one is inside the limit
           let toDelete = results[2].slice(1);
           if (toDelete.indexOf(key) !== -1) {
@@ -199,7 +196,7 @@ function buildCache (client, opts) {
   * Return an array of the keys currently in the cache, most reacently accessed
   * first.
   */
-  const keys = () => asPromise(client.zrange.bind(client), ZSET_KEY, 0, -1)
+  const keys = () => asPromise(client.zrange.bind(client), ZSET_KEY, 0, opts.max - 1)
     .then((results) => results.map((key) => key.slice(`${opts.namespace}-k-`.length)));
 
   /*
