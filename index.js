@@ -87,7 +87,6 @@ function buildCache (client, opts) {
           results = flattenMultiResults(results);
         }
 
-        console.log("GET RESULTS: ", results);
         if (results[0] === null && results[1]) {
           // value has been expired, remove from zset
           return asPromise(client.zrem.bind(client), ZSET_KEY, key)
@@ -136,7 +135,6 @@ function buildCache (client, opts) {
           results = flattenMultiResults(results);
         }
 
-        console.log("SET RESULTS: ", results);
         if (results[2].length > 1) { // the first one is inside the limit
           let toDelete = results[2].slice(1);
           if (toDelete.indexOf(key) !== -1) {
@@ -216,7 +214,10 @@ function buildCache (client, opts) {
     })
     .then((results) => {
       return results.map((res) => {
-        return JSON.parse(res[1]);
+        if(isArray(res)) {
+          res = res[1];
+        }
+        return JSON.parse(res);
       });
     });
   /*
