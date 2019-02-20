@@ -15,12 +15,16 @@ function isArray (item) {
   return Array.isArray(item);
 }
 
-function isIORedisFormattedTransactionResults (results) {
-  return isArray(results[0]);
-}
-
-function convertTransactionResultsToNodeRedis (results) {
-  return results.map((result) => result[1]);
+/*
+* IORedis uses a different format than node_redis for transactional results.
+* Instead of ['OK', 1] it returns [[null, 'OK'], [null, 1]]. This function
+* is used to convert the IORedis results to the same format as node_redis.
+*/
+function convertToNodeRedis (results) {
+  if (isArray(results[0])) {
+    return results.map((result) => result[1]);
+  }
+  return results;
 }
 
 function buildCache (client, opts) {
@@ -86,10 +90,8 @@ function buildCache (client, opts) {
     }
 
     return asPromise(multi.exec.bind(multi))
+      .then(convertToNodeRedis)
       .then((results) => {
-        if (isIORedisFormattedTransactionResults(results)) {
-          results = convertTransactionResultsToNodeRedis(results);
-        }
         if (results[0] === null && results[1]) {
           // value has been expired, remove from zset
           return asPromise(client.zrem.bind(client), ZSET_KEY, key)
@@ -132,10 +134,8 @@ function buildCache (client, opts) {
     multi.zrange(ZSET_KEY, opts.max - 1, -1);
 
     return asPromise(multi.exec.bind(multi))
+      .then(convertToNodeRedis)
       .then((results) => {
-        if (isIORedisFormattedTransactionResults(results)) {
-          results = convertTransactionResultsToNodeRedis(results);
-        }
         if (results[2].length > 1) { // the first one is inside the limit
           let toDelete = results[2].slice(1);
           if (toDelete.indexOf(key) !== -1) {
