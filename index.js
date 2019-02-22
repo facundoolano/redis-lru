@@ -110,6 +110,7 @@ function buildCache (client, opts) {
   * cache (in a single transaction).
   */
   const set = (key, value, maxAge) => {
+    const _key = key;
     const score = -1 * opts.score(key);
     key = namedKey(key);
     maxAge = maxAge || opts.maxAge;
@@ -144,7 +145,7 @@ function buildCache (client, opts) {
           return safeDelete(toDelete);
         }
       })
-      .then(() => key);
+      .then(() => _key);
   };
 
   /*
