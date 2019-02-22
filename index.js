@@ -144,7 +144,7 @@ function buildCache (client, opts) {
           return safeDelete(toDelete);
         }
       })
-      .then(() => value);
+      .then(() => key);
   };
 
   /*
