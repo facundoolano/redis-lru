@@ -2,9 +2,9 @@
 
 const assert = require('assert');
 
-// const redis = require('redis').createClient(6379, 'redis-host');
+const redis = require('redis').createClient(6379, 'localhost');
 // const Redis = require('ioredis'); const redis = new Redis(6379, 'redis-host');
-const redis = require('./redisMock');
+// const redis = require('./redisMock');
 
 const LRU = require('../index');
 
