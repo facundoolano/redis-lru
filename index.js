@@ -37,7 +37,7 @@ function buildCache (client, opts) {
   }
 
   opts = Object.assign({
-    namespace: 'LRU-CACHE!' + opts.namespace,
+    namespace: 'LRU-CACHE!' + (opts.namespace || ''),
     score: () => new Date().getTime(),
     increment: false
   }, opts);
