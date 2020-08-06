@@ -399,6 +399,30 @@ describe('values method', () => {
   });
 });
 
+describe('entries method', () => {
+  it('should return all entries inside the cache', () => {
+    const lru = LRU(redis, 2);
+
+    return lru.set('k1', 'v1')
+      .then(tick)
+      .then(() => lru.set('k2', 'v2'))
+      .then(() => lru.entries())
+      .then((r) => assert.deepEqual(r, [['k2', 'v2'], ['k1', 'v1']]));
+  });
+
+  it('should not return more entries if size exceeded before', () => {
+    const lru = LRU(redis, 2);
+
+    return lru.set('k1', 'v1')
+      .then(tick)
+      .then(() => lru.set('k2', 'v2'))
+      .then(tick)
+      .then(() => lru.set('k3', 'v3'))
+      .then(() => lru.entries())
+      .then((r) => assert.deepEqual(r, [['k3', 'v3'], ['k2', 'v2']]));
+  });
+});
+
 describe('count method', () => {
   it('should return zero if no items in the cache', () => {
     const lru = LRU(redis, 2);

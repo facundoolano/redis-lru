@@ -221,6 +221,30 @@ function buildCache (client, opts) {
         return JSON.parse(res);
       });
     });
+
+  /*
+  * Return an array of the entries currently in the cache, most reacently accessed
+  * first.
+  */
+  const entries = () => asPromise(client.zrange.bind(client), ZSET_KEY, 0, opts.max - 1)
+    .then((keys) => {
+      const multi = client.multi();
+      keys.forEach((key) => multi.get(key));
+      return asPromise(multi.exec.bind(multi))
+      .then((res) => {
+        const results = new Array(res.length);
+        for (let i = 0; i < res.length; i++) {
+          let val = res[i];
+          if (isArray(val)) val = val[1];
+          results[i] = [
+            keys[i].slice(`${opts.namespace}-k-`.length),
+            JSON.parse(val)
+          ];
+        }
+        return results;
+      });
+    });
+
   /*
   * Return the amount of items currently in the cache.
   */
@@ -236,6 +260,7 @@ function buildCache (client, opts) {
     has: has,
     keys: keys,
     values: values,
+    entries: entries,
     count: count
   };
 }
